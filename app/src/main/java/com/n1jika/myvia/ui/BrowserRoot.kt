@@ -1,0 +1,402 @@
+package com.n1jika.myvia.ui
+
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.VectorConverter
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.fragment.app.FragmentActivity
+import androidx.viewpager2.widget.ViewPager2
+import com.n1jika.myvia.tab.TabAdapter
+import com.n1jika.myvia.tab.TabManager
+import com.n1jika.myvia.ui.addressbar.AddressBarContent
+import com.n1jika.myvia.ui.glass.BackdropSource
+import com.n1jika.myvia.ui.glass.GlassButton
+import com.n1jika.myvia.ui.glass.GlassSurface
+import com.n1jika.myvia.ui.glass.GlassTokens
+import com.n1jika.myvia.ui.glass.HamburgerIcon
+import com.n1jika.myvia.ui.home.HomeBackground
+import com.n1jika.myvia.ui.home.HomeBackgroundLayer
+import com.n1jika.myvia.ui.menu.BrowserMenu
+import com.n1jika.myvia.ui.menu.MenuAction
+import com.n1jika.myvia.ui.motion.Haptics
+import com.n1jika.myvia.ui.motion.Kind
+import com.n1jika.myvia.ui.motion.Springs
+import com.n1jika.myvia.ui.motion.impactEffect
+import com.n1jika.myvia.ui.motion.rememberImpact
+import com.n1jika.myvia.ui.motion.rememberHaptics
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
+
+/** 三种界面状态。元素在这三态之间连续飞行，而不是页面跳转。 */
+enum class UiMode { Home, Editing, Browsing }
+
+/** 跨 Compose 与 WebView 的共享状态。 */
+class BrowserUiState {
+    var mode by mutableStateOf(UiMode.Home)
+    var query by mutableStateOf("")
+    var currentUrl by mutableStateOf("")
+    var loading by mutableStateOf(false)
+    var menuOpen by mutableStateOf(false)
+    var pageBackdrop by mutableStateOf<BackdropSource?>(null)
+}
+
+/**
+ * 浏览器外壳。
+ *
+ * 屏幕上永远是同一批元素：搜索/地址栏、右上角菜单键、背景、网页层。
+ * 状态切换只是把它们弹到不同的位置和尺寸，所以过渡天然连贯。
+ */
+@Composable
+fun BrowserRoot(
+    activity: FragmentActivity,
+    ui: BrowserUiState,
+    tabManager: TabManager,
+    tabAdapter: TabAdapter,
+    onNavigate: (String) -> Unit,
+    onMenuAction: (MenuAction) -> Unit,
+    onPagerCreated: (ViewPager2) -> Unit,
+) {
+    val density = LocalDensity.current
+    val haptic = rememberHaptics()
+    val impact = rememberImpact()
+    val focusRequester = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+
+    val bgBitmap = HomeBackground.rememberBackgroundBitmap()
+    val backdropNormal = HomeBackground.rememberBackdrop(bgBitmap, extraBlur = 1f)
+    val backdropFocused = HomeBackground.rememberBackdrop(bgBitmap, extraBlur = GlassTokens.focusExtraBlur)
+
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val w = constraints.maxWidth.toFloat()
+        val h = constraints.maxHeight.toFloat()
+        val statusBar = activity.window.decorView.rootWindowInsets?.let {
+            androidx.core.view.WindowInsetsCompat
+                .toWindowInsetsCompat(it)
+                .getInsets(androidx.core.view.WindowInsetsCompat.Type.statusBars())
+                .top
+        } ?: 0
+
+        // ---------- 布局度量 ----------
+        val homeBar = Rect(
+            left = w * 0.07f,
+            top = h * 0.382f - with(density) { GlassTokens.searchBarHeight.toPx() } / 2f,
+            right = w * 0.93f,
+            bottom = h * 0.382f + with(density) { GlassTokens.searchBarHeight.toPx() } / 2f,
+        )
+        val browseBarWidth = w * 0.60f
+        val browseBarHeight = with(density) { GlassTokens.addressBarHeight.toPx() }
+        val browseBar = Rect(
+            left = with(density) { 16.dp.toPx() },
+            top = (statusBar + with(density) { 8.dp.toPx() }),
+            right = with(density) { 16.dp.toPx() } + browseBarWidth,
+            bottom = (statusBar + with(density) { 8.dp.toPx() }) + browseBarHeight,
+        )
+        val btnSize = with(density) { GlassTokens.menuButtonSize.toPx() }
+        val homeBtn = Rect(
+            left = w - with(density) { 16.dp.toPx() } - btnSize,
+            top = (statusBar + with(density) { 14.dp.toPx() }),
+            right = w - with(density) { 16.dp.toPx() },
+            bottom = (statusBar + with(density) { 14.dp.toPx() }) + btnSize,
+        )
+        val browseBtn = Rect(
+            left = browseBar.right + with(density) { 8.dp.toPx() },
+            top = browseBar.top + (browseBarHeight - btnSize) / 2f,
+            right = browseBar.right + with(density) { 8.dp.toPx() } + btnSize,
+            bottom = browseBar.top + (browseBarHeight - btnSize) / 2f + btnSize,
+        )
+
+        // ---------- 飞行的元素 ----------
+        val barRect = remember(w, h, statusBar) {
+            Animatable(homeBar, Rect.VectorConverter)
+        }
+        val btnRect = remember(w, h, statusBar) {
+            Animatable(homeBtn, Rect.VectorConverter)
+        }
+        val bar by barRect.asState()
+        val btn by btnRect.asState()
+
+        LaunchedEffect(ui.mode, w, h) {
+            val browse = ui.mode == UiMode.Browsing
+            kotlinx.coroutines.coroutineScope {
+                launch { barRect.animateTo(if (browse) browseBar else homeBar, Springs.flight) }
+                launch { btnRect.animateTo(if (browse) browseBtn else homeBtn, Springs.flight) }
+            }
+            if (browse) {
+                // 地址栏与菜单键到位：来一次轻微碰撞，玻璃"碰"在一起
+                impact.impact()
+                haptic(Kind.Confirm)
+                ScreenCapture.captureBackdrop(activity.window) { bd ->
+                    if (bd != null) ui.pageBackdrop = bd
+                }
+            }
+        }
+
+        // ---------- 背景层 ----------
+        val bgAlpha by animateFloatAsState(
+            targetValue = if (ui.mode == UiMode.Browsing) 0f else 1f,
+            animationSpec = Springs.gentle,
+            label = "bgAlpha",
+        )
+        HomeBackgroundLayer(
+            bitmap = bgBitmap,
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer { alpha = bgAlpha },
+        )
+
+        // ---------- 网页层 ----------
+        val pageAlpha by animateFloatAsState(
+            targetValue = if (ui.mode == UiMode.Browsing) 1f else 0f,
+            animationSpec = Springs.gentle,
+            label = "pageAlpha",
+        )
+        AndroidView(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer { alpha = pageAlpha },
+            factory = { context ->
+                ViewPager2(context).apply {
+                    adapter = tabAdapter
+                    isUserInputEnabled = false
+                    onPagerCreated(this)
+                }
+            },
+        )
+
+        // ---------- 聚焦遮罩：搜索框弹起时整屏压暗 ----------
+        val dim by animateFloatAsState(
+            targetValue = if (ui.mode == UiMode.Editing) GlassTokens.focusDim else 0f,
+            animationSpec = Springs.gentle,
+            label = "dim",
+        )
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+                .alpha(dim),
+        )
+
+        val backdrop = when {
+            ui.mode == UiMode.Browsing -> ui.pageBackdrop ?: backdropFocused
+            ui.mode == UiMode.Editing -> backdropFocused
+            else -> backdropNormal
+        }
+
+        // ---------- 流光：加载中绕边框顺时针跑 ----------
+        val spin = rememberInfiniteTransition(label = "rim")
+        val spinValue by spin.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(GlassTokens.rimPeriodMs, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart,
+            ),
+            label = "rimSpin",
+        )
+        val rimAlpha by animateFloatAsState(
+            targetValue = if (ui.loading) 1f else 0f,
+            animationSpec = tween(450),
+            label = "rimAlpha",
+        )
+        val rimProgress = if (rimAlpha > 0.01f) spinValue else null
+
+        // ---------- 搜索 / 地址栏 ----------
+        val barScale by animateFloatAsState(
+            targetValue = if (ui.mode == UiMode.Editing) 1.03f else 1f,
+            animationSpec = Springs.bouncy,
+            label = "barScale",
+        )
+        val barCorner by animateDpAsState(
+            targetValue = if (ui.mode == UiMode.Browsing) {
+                GlassTokens.addressBarCorner
+            } else {
+                GlassTokens.searchBarCorner
+            },
+            animationSpec = Springs.gentleDp,
+            label = "barCorner",
+        )
+
+        GlassSurface(
+            modifier = Modifier
+                .offset { IntOffset(bar.left.roundToInt(), bar.top.roundToInt()) }
+                .size(
+                    width = with(density) { bar.width.toDp() },
+                    height = with(density) { bar.height.toDp() },
+                )
+                .graphicsLayer {
+                    scaleX = barScale
+                    scaleY = barScale
+                    transformOrigin = TransformOrigin.Center
+                }
+                .impactEffect(impact)
+                .pointerInput(ui.mode) {
+                    if (ui.mode == UiMode.Browsing) {
+                        var accumulated = 0f
+                        detectVerticalDragGestures(
+                            onDragStart = { accumulated = 0f },
+                            onDragEnd = {
+                                if (accumulated > 140f) {
+                                    ui.mode = UiMode.Home
+                                    haptic(Kind.Tick)
+                                }
+                                accumulated = 0f
+                            },
+                        ) { _, dragAmount ->
+                            if (dragAmount > 0) accumulated += dragAmount
+                        }
+                    }
+                },
+            backdrop = backdrop,
+            cornerRadius = barCorner,
+            rimProgress = rimProgress,
+            rimAlpha = rimAlpha,
+        ) {
+            AddressBarContent(
+                text = ui.query,
+                url = ui.currentUrl,
+                editing = ui.mode != UiMode.Browsing,
+                onTextChange = { ui.query = it },
+                onSubmit = {
+                    keyboard?.hide()
+                    val text = ui.query.trim()
+                    if (text.isNotEmpty()) {
+                        ui.mode = UiMode.Browsing
+                        onNavigate(text)
+                        ui.query = ""
+                    }
+                },
+                modifier = Modifier.fillMaxSize(),
+                focusRequester = focusRequester,
+            )
+            // 非编辑态：整条玻璃可点，点一下进入编辑并把当前网址带进来
+            if (ui.mode != UiMode.Editing) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .pointerInput(ui.mode) {
+                            detectTapNoRipple {
+                                ui.query = if (ui.mode == UiMode.Browsing) ui.currentUrl else ""
+                                ui.mode = UiMode.Editing
+                                haptic(Kind.Tick)
+                            }
+                        },
+                )
+            }
+        }
+
+        // 编辑态：自动聚焦并弹键盘
+        LaunchedEffect(ui.mode) {
+            if (ui.mode == UiMode.Editing) {
+                runCatching { focusRequester.requestFocus() }
+                keyboard?.show()
+            }
+        }
+
+        // ---------- 圆形菜单键 ----------
+        GlassButton(
+            onClick = {
+                ui.menuOpen = true
+                haptic(Kind.Tick)
+            },
+            backdrop = backdrop,
+            modifier = Modifier
+                .offset { IntOffset(btn.left.roundToInt(), btn.top.roundToInt()) }
+                .impactEffect(impact),
+        ) {
+            HamburgerIcon()
+        }
+
+        // ---------- 下拉菜单 ----------
+        AnimatedVisibility(
+            visible = ui.menuOpen,
+            enter = fadeIn(tween(120)),
+            exit = fadeOut(tween(140)),
+        ) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.10f))
+                    .pointerInput(Unit) {
+                        detectTapNoRipple { ui.menuOpen = false }
+                    },
+            )
+        }
+        AnimatedVisibility(
+            visible = ui.menuOpen,
+            enter = fadeIn(tween(140)) + scaleIn(
+                initialScale = 0.86f,
+                transformOrigin = TransformOrigin(1f, 0f),
+                animationSpec = Springs.snappy,
+            ),
+            exit = fadeOut(tween(120)) + scaleOut(
+                targetScale = 0.9f,
+                transformOrigin = TransformOrigin(1f, 0f),
+                animationSpec = Springs.snappy,
+            ),
+        ) {
+            Box(
+                Modifier
+                    .padding(
+                        top = with(density) { btn.bottom.toDp() } + 8.dp,
+                        end = 12.dp,
+                    )
+                    .align(Alignment.TopEnd),
+            ) {
+                BrowserMenu(
+                    backdrop = backdrop,
+                    onPick = { action ->
+                        ui.menuOpen = false
+                        onMenuAction(action)
+                    },
+                )
+            }
+        }
+    }
+}
+
+/** 无涟漪的点击检测。 */
+private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.detectTapNoRipple(
+    onTap: () -> Unit,
+) {
+    detectTapGestures(onTap = { onTap() })
+}

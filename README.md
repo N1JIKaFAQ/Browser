@@ -3,32 +3,47 @@
 灵感来自 [Via 浏览器](https://via浏览器)（注意：Via 本体闭源，本仓库与其无代码关系，仅参考其交互风格）。
 MyVia 从零手写，基于 Android `WebView`，目标：**轻、快、完全按自己的习惯定制**。
 
-## 当前功能（v0.1.0 骨架）
+## 当前功能（v0.2：液态玻璃主页 + 苹果式动效）
 
-- 地址栏直达 / 搜索（Baidu），点击全选、非编辑态显示页面标题（Via 习惯）
-- 多标签页（ViewPager2 + 稳定 id 的 TabAdapter）
-- 底部导航：后退 / 前进 / 首页 / 标签列表
-- 轻量广告拦截：内置常见广告域名表 + 「拦截此站点广告」逐条加黑
-- 设置页：主页地址、主题（跟随系统/浅色/深色）、UA（Via 风格隐藏标识 / 默认 / 桌面站点）、无图模式
-- 深色模式站点补偿（Algorithmic Darkening + 注入兜底）
-- 可被其他 App 以浏览器方式拉起（http/https intent-filter）
+主页整屏只有两样东西：**黄金分割位置（屏高 38.2%）的液态玻璃搜索框**，和**右上角圆形玻璃菜单键**。
+搜索框除液态玻璃本体外没有任何图标、提示文字或按钮。
+
+- **液态玻璃**：AGSL 着色器（Android 13+）实现圆角 SDF + 边缘折射 + 受光面高光 + 内部模糊 + 色调；
+  Android 12 降级为模糊玻璃、11 及以下为磨砂描边（`GlassCapability` 统一判定，业务代码不感知版本）
+- **交互动画**（全部弹簧物理，参数集中在 `ui/motion/Springs.kt`）：
+  - 点菜单键：按下缩到 0.9，松手过冲回弹 + 轻触感反馈
+  - 点搜索框：弹性放大 1.03，整屏背景加模糊并压暗 12%
+  - 确认搜索：搜索框飞到左上（占屏宽 60%、左边距 16dp），菜单键同时从右上角飞到它右侧，
+    两者到位时做一次**碰撞形变回弹**（横向挤压 2.8%、纵向按泊松比收缩）
+  - 加载中：圆角边框上有**流光顺时针绕行**（1.6s/圈，尾部渐隐），经过处玻璃边缘高光同步增强；
+    加载完成流光收束淡出
+  - 长网址：首尾各 12dp 渐隐，不硬截断
+- **下拉菜单**：液态玻璃面板从菜单键位置展开，**可视区固定 4 项**，超出可滚动（惯性 + 越界回弹 + 上下渐隐）；
+  条目表驱动（书签 / 历史 / 下载 / 隐身 / 分享 / 添加书签 / 电脑模式 / 工具箱 / 设置），加功能只加一行
+- **浏览器内核**：地址栏直达 / 搜索解析、多标签（ViewPager2 + 稳定 id）、广告拦截（内置表 + 自定义黑名单）、
+  UA 切换（含电脑模式）、深色站点补偿、可被其他 App 拉起
+
+> 玻璃观感调参入口：`ui/glass/GlassTokens.kt`（圆角、折射带宽与强度、高光、流光周期与颜色、背景模糊等）。
 
 ## 目录结构
 
 ```
 app/src/main/java/com/n1jika/myvia/
-├── MainActivity.kt          # 主界面：地址栏 + 底部栏 + 标签容器
-├── Prefs.kt                 # SharedPreferences 统一配置
-├── browser/
-│   ├── BrowserView.kt       # 共享配置的 WebView（每标签一个实例）
-│   ├── BrowserFragment.kt   # 标签页 Fragment 宿主
-│   ├── BrowserEngine.kt     # per-tab WebViewClient/WebChromeClient
-│   ├── AdBlocker.kt         # 广告规则匹配
-│   └── UrlUtils.kt          # 地址栏输入解析
-├── tab/
-│   ├── TabItem.kt / TabManager.kt / TabAdapter.kt
-└── settings/
-    └── SettingsActivity.kt  # PreferenceFragmentCompat 设置页
+├── MainActivity.kt              # Compose 承载外壳，保留 WebView 内核逻辑
+├── Prefs.kt                     # SharedPreferences 统一配置
+├── browser/                     # WebView 内核（View 体系，未改动）
+│   ├── BrowserView.kt / BrowserFragment.kt / BrowserEngine.kt
+│   ├── AdBlocker.kt / UrlUtils.kt
+├── tab/                         # 标签数据与 ViewPager2 适配
+├── settings/                    # 旧版设置页（P4 将重写为液态玻璃版）
+└── ui/                          # 新 UI 外壳（Compose）
+    ├── BrowserRoot.kt           # 三态状态机（主页/编辑/浏览）+ 飞行动画编排
+    ├── ScreenCapture.kt         # 抓窗口快照给玻璃当背景
+    ├── glass/                   # 玻璃基座：GlassSurface / 着色器 / Token / 能力分级 / 背景源
+    ├── motion/                  # Springs / 碰撞形变 / 触感反馈
+    ├── home/                    # 主页背景（程序生成渐变，后续支持自定义图片）
+    ├── addressbar/              # 地址栏（极简、首尾渐隐）
+    └── menu/                    # 液态玻璃下拉菜单 + 手绘图标
 ```
 
 ## 开发环境（本机已配好，命令行构建）
