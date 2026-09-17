@@ -18,6 +18,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -61,7 +66,18 @@ fun AddressBarContent(
                 onValueChange = onTextChange,
                 modifier = Modifier
                     .fillMaxSize()
-                    .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier),
+                    .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
+                    // 硬件/外接键盘的回车也要能提交（IME 的 Go 只覆盖软键盘）
+                    .onPreviewKeyEvent { event ->
+                        if (event.type == KeyEventType.KeyDown &&
+                            (event.key == Key.Enter || event.key == Key.NumPadEnter)
+                        ) {
+                            onSubmit()
+                            true
+                        } else {
+                            false
+                        }
+                    },
                 singleLine = true,
                 textStyle = style,
                 cursorBrush = SolidColor(Color.White),

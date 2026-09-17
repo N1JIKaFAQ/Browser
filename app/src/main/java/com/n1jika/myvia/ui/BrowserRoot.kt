@@ -41,6 +41,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -183,23 +184,42 @@ fun BrowserRoot(
                 .fillMaxSize()
                 .graphicsLayer { alpha = bgAlpha },
         )
+        // 聚焦时叠一层模糊版背景并淡入：整屏糊掉，注意力集中到搜索框
+        val blurredBgBitmap = HomeBackground.rememberBlurredBackground(bgBitmap)
+        val bgBlurAlpha by animateFloatAsState(
+            targetValue = if (ui.mode == UiMode.Editing) 1f else 0f,
+            animationSpec = Springs.gentle,
+            label = "bgBlurAlpha",
+        )
+        HomeBackgroundLayer(
+            bitmap = blurredBgBitmap,
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer { alpha = bgAlpha * bgBlurAlpha },
+        )
 
         // ---------- 网页层 ----------
+        // AndroidView 是真 View，Compose 的 graphicsLayer(alpha) 对它无效，
+        // 必须用 View 自己的 alpha/visibility 来控制显隐，否则未加载的 WebView
+        // 会以深色底整块盖住主页背景
         val pageAlpha by animateFloatAsState(
             targetValue = if (ui.mode == UiMode.Browsing) 1f else 0f,
             animationSpec = Springs.gentle,
             label = "pageAlpha",
         )
         AndroidView(
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer { alpha = pageAlpha },
+            modifier = Modifier.fillMaxSize(),
             factory = { context ->
                 ViewPager2(context).apply {
                     adapter = tabAdapter
                     isUserInputEnabled = false
                     onPagerCreated(this)
                 }
+            },
+            update = { pager ->
+                pager.alpha = pageAlpha
+                pager.visibility = if (pageAlpha < 0.01f) android.view.View.INVISIBLE
+                else android.view.View.VISIBLE
             },
         )
 
@@ -209,11 +229,12 @@ fun BrowserRoot(
             animationSpec = Springs.gentle,
             label = "dim",
         )
+        // 注意：不要把 alpha() 写在 background() 后面——background 会落在图层之外，
+        // 结果是不透明的黑把整个界面盖死。直接给颜色本身带透明度最稳。
         Box(
             Modifier
                 .fillMaxSize()
-                .background(Color.Black)
-                .alpha(dim),
+                .background(Color.Black.copy(alpha = dim)),
         )
 
         val backdrop = when {
@@ -223,6 +244,16 @@ fun BrowserRoot(
         }
 
         // ---------- 流光：加载中绕边框顺时针跑 ----------
+        // 页面上线后至少显示一小段，避免秒开时流光一闪而过、反而像闪烁
+        var rimVisible by remember { mutableStateOf(false) }
+        LaunchedEffect(ui.loading) {
+            if (ui.loading) {
+                rimVisible = true
+            } else {
+                kotlinx.coroutines.delay(RIM_MIN_VISIBLE_MS)
+                rimVisible = false
+            }
+        }
         val spin = rememberInfiniteTransition(label = "rim")
         val spinValue by spin.animateFloat(
             initialValue = 0f,
@@ -234,7 +265,7 @@ fun BrowserRoot(
             label = "rimSpin",
         )
         val rimAlpha by animateFloatAsState(
-            targetValue = if (ui.loading) 1f else 0f,
+            targetValue = if (rimVisible) 1f else 0f,
             animationSpec = tween(450),
             label = "rimAlpha",
         )
@@ -324,11 +355,16 @@ fun BrowserRoot(
             }
         }
 
-        // 编辑态：自动聚焦并弹键盘
+        // 编辑态：自动聚焦并弹键盘（窗口级请求 IME，比 SoftwareKeyboardController 可靠）
+        val rootView = LocalView.current
         LaunchedEffect(ui.mode) {
+            val controller = androidx.core.view.WindowInsetsControllerCompat(activity.window, rootView)
             if (ui.mode == UiMode.Editing) {
                 runCatching { focusRequester.requestFocus() }
-                keyboard?.show()
+                kotlinx.coroutines.delay(60)
+                controller.show(androidx.core.view.WindowInsetsCompat.Type.ime())
+            } else {
+                controller.hide(androidx.core.view.WindowInsetsCompat.Type.ime())
             }
         }
 
@@ -361,26 +397,28 @@ fun BrowserRoot(
                     },
             )
         }
-        AnimatedVisibility(
-            visible = ui.menuOpen,
-            enter = fadeIn(tween(140)) + scaleIn(
-                initialScale = 0.86f,
-                transformOrigin = TransformOrigin(1f, 0f),
-                animationSpec = Springs.snappy,
-            ),
-            exit = fadeOut(tween(120)) + scaleOut(
-                targetScale = 0.9f,
-                transformOrigin = TransformOrigin(1f, 0f),
-                animationSpec = Springs.snappy,
-            ),
+        // 外层 Box 负责对齐（align 必须作用于 BoxWithConstraints 的直接子节点，
+        // 写在 AnimatedVisibility 里面是不生效的）
+        Box(
+            Modifier
+                .align(Alignment.TopEnd)
+                .padding(
+                    top = with(density) { btn.bottom.toDp() } + 8.dp,
+                    end = 12.dp,
+                ),
         ) {
-            Box(
-                Modifier
-                    .padding(
-                        top = with(density) { btn.bottom.toDp() } + 8.dp,
-                        end = 12.dp,
-                    )
-                    .align(Alignment.TopEnd),
+            AnimatedVisibility(
+                visible = ui.menuOpen,
+                enter = fadeIn(tween(140)) + scaleIn(
+                    initialScale = 0.86f,
+                    transformOrigin = TransformOrigin(1f, 0f),
+                    animationSpec = Springs.snappy,
+                ),
+                exit = fadeOut(tween(120)) + scaleOut(
+                    targetScale = 0.9f,
+                    transformOrigin = TransformOrigin(1f, 0f),
+                    animationSpec = Springs.snappy,
+                ),
             ) {
                 BrowserMenu(
                     backdrop = backdrop,
@@ -400,3 +438,6 @@ private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.detectTa
 ) {
     detectTapGestures(onTap = { onTap() })
 }
+
+/** 流光最短可见时长：避免秒开时一闪而过 */
+private const val RIM_MIN_VISIBLE_MS = 700L

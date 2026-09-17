@@ -6,7 +6,7 @@ import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.RadialGradient
 import android.graphics.Shader
-import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,6 +20,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import com.n1jika.myvia.ui.glass.BackdropSource
+import com.n1jika.myvia.ui.glass.FastBlur
 
 /**
  * 主页背景。
@@ -53,6 +54,17 @@ object HomeBackground {
     fun rememberBackdrop(bitmap: Bitmap, extraBlur: Float = 1f): BackdropSource =
         remember(bitmap, extraBlur) {
             BackdropSource.fromScaledBitmap(bitmap, SCALE, extraBlur = extraBlur)
+        }
+
+    /**
+     * 可见背景的"高斯模糊版"。
+     * 搜索框聚焦时用它叠一层淡入，做出"整屏背景糊掉、把注意力交给搜索框"的效果。
+     * 位图本来就只有 1/4 分辨率，再糊一次几乎不花时间。
+     */
+    @Composable
+    fun rememberBlurredBackground(bitmap: Bitmap, scale: Float = 3.5f): Bitmap =
+        remember(bitmap, scale) {
+            FastBlur.blur(bitmap, scale.toInt().coerceAtLeast(1))
         }
 
     /** 程序生成的渐变底：深海蓝 → 青绿 → 靛紫，带两个柔光斑。 */
@@ -96,12 +108,16 @@ object HomeBackground {
 @Composable
 fun HomeBackgroundLayer(bitmap: Bitmap, modifier: Modifier = Modifier) {
     Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
-        Image(
-            bitmap = bitmap.asImageBitmap(),
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop,
-            filterQuality = FilterQuality.Low,
-        )
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            drawImage(
+                image = bitmap.asImageBitmap(),
+                srcSize = androidx.compose.ui.unit.IntSize(bitmap.width, bitmap.height),
+                dstSize = androidx.compose.ui.unit.IntSize(
+                    size.width.toInt().coerceAtLeast(1),
+                    size.height.toInt().coerceAtLeast(1),
+                ),
+                filterQuality = FilterQuality.Low,
+            )
+        }
     }
 }
