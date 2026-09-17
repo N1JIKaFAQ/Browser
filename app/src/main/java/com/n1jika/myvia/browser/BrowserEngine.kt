@@ -19,7 +19,7 @@ class BrowserEngine(
     private val onTitle: (title: String) -> Unit,
     private val onIcon: (icon: Bitmap?) -> Unit,
 ) {
-    private val webView: WebView get() = view.webView
+    private val webView: WebView get() = view
 
     fun attach() {
         webView.webViewClient = Client()

@@ -8,3 +8,7 @@
 .externalNativeBuild
 .cxx
 app/build/
+
+# 本地工具与 ZCode 会话目录
+/.zcode/
+/push_via_api.py

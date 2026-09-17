@@ -30,6 +30,10 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+    buildFeatures {
+        viewBinding = true
+        buildConfig = true // AGP 8 默认关闭，MainActivity 用到 BuildConfig.VERSION_NAME
+    }
     kotlinOptions {
         jvmTarget = "17"
     }

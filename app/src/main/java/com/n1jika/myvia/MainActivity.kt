@@ -187,7 +187,9 @@ class MainActivity : AppCompatActivity(), BrowserView.BrowserCallback {
         AlertDialog.Builder(this)
             .setView(input)
             .setPositiveButton(android.R.string.ok) { _, _ ->
-                currentView?.findAddress(input.text.toString())
+                // WebView.findAddress 已从公开 API 移除，用 Chromium 内建的 window.find
+                val query = org.json.JSONObject.quote(input.text.toString())
+                currentView?.evaluateJavascript("window.find($query)", null)
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
