@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.preference.PreferenceScreen
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <EditTextPreference
+        android:defaultValue="https://www.baidu.com"
+        android:key="pref_home_url"
+        android:title="@string/pref_home_url"
+        app:useSimpleSummaryProvider="true" />
+
+    <ListPreference
+        android:defaultValue="0"
+        android:entries="@array/theme_entries"
+        android:entryValues="@array/theme_values"
+        android:key="pref_theme"
+        android:title="@string/pref_theme"
+        app:useSimpleSummaryProvider="true" />
+
+    <ListPreference
+        android:defaultValue="0"
+        android:entries="@array/ua_entries"
+        android:entryValues="@array/ua_values"
+        android:key="pref_ua_mode"
+        android:title="@string/pref_ua"
+        app:useSimpleSummaryProvider="true" />
+
+    <SwitchPreferenceCompat
+        android:defaultValue="true"
+        android:key="pref_ad_block"
+        android:title="@string/pref_ad_block"
+        android:summary="@string/pref_ad_block_summary" />
+
+    <SwitchPreferenceCompat
+        android:defaultValue="false"
+        android:key="pref_no_image"
+        android:title="@string/pref_no_image"
+        android:summary="@string/pref_no_image_summary" />
+
+</androidx.preference.PreferenceScreen>
