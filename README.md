@@ -31,17 +31,36 @@ app/src/main/java/com/n1jika/myvia/
     └── SettingsActivity.kt  # PreferenceFragmentCompat 设置页
 ```
 
-## 开发环境（本机尚未安装，装好后即可编译）
+## 开发环境（本机已配好，命令行构建）
 
-1. 安装 **Android Studio**（自带 JDK 与 SDK Manager）：https://developer.android.com/studio
-   或命令行工具：JDK 17+ 与 Android SDK（cmdline-tools + platform 34 + build-tools 34）。
-2. 首次用 Android Studio 打开本目录，等待 Gradle 同步（wrapper 已就位，无需本机装 Gradle）。
-3. 编译安装到手机：`gradlew assembleDebug`，APK 在 `app/build/outputs/apk/debug/`。
-   （手机开启 USB 调试，`adb install app\build\outputs\apk\debug\app-debug.apk`）
+本机安装位置与版本（均为纯 ASCII 路径，避开 Windows 中文路径坑）：
 
-> 国内网络同步慢时，可在 `gradle-wrapper.properties` 的 distributionUrl 和
-> `settings.gradle.kts` 仓库列表里加腾讯云镜像：`https://mirrors.cloud.tencent.com/gradle/`、
-> `https://mirrors.cloud.tencent.com/nexus/repository/maven-public/`。
+- **JDK 17**：`D:\Java\jdk-17`（Temurin，`JAVA_HOME` 已设为用户环境变量）
+- **Android SDK**：`D:\Android\Sdk`（`ANDROID_HOME` 已设；cmdline-tools 布局在 `cmdline-tools\latest`；已装 `platform-tools` / `platforms;android-34` / `build-tools;34.0.0`，许可已接受）
+- **Gradle**：无需单装，wrapper 自动拉 8.7；缓存重定向到 `D:\Android\.gradle`（`GRADLE_USER_HOME`，避免占 C 盘）
+- **local.properties**（不入库）：`sdk.dir=D:/Android/Sdk`
+- **PATH** 已追加：`%JAVA_HOME%\bin`、`%ANDROID_HOME%\cmdline-tools\latest\bin`、`%ANDROID_HOME%\platform-tools`（新开终端生效）
+
+### 构建 / 安装
+
+```bat
+cd /d D:\手机浏览器项目
+gradlew.bat assembleDebug
+```
+
+APK 产出：`app\build\outputs\apk\debug\app-debug.apk`（当前 debug 约 6MB）。
+手机开 USB 调试后：
+
+```bat
+adb install -r app\build\outputs\apk\debug\app-debug.apk
+```
+
+> 项目目录名含中文，`gradle.properties` 已启用 `android.overridePathCheck=true`
+> 跳过 AGP 的 ASCII 路径检查（SDK/JDK 都在英文路径，构建实测通过）。
+> `sdk.dir` 务必用正斜杠 `D:/Android/Sdk`，反斜杠转义会触发
+> “文件名、目录名或卷标语法不正确”。
+> 需要 GUI/可视化编辑器/模拟器时再装 Android Studio；命令行编译不需要它。
+> 国内网络若变慢，可用腾讯云镜像：`https://mirrors.cloud.tencent.com/gradle/`。
 
 ## 路线图（下一步从这里开始）
 
