@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -79,6 +80,8 @@ class BrowserUiState {
     var loading by mutableStateOf(false)
     var menuOpen by mutableStateOf(false)
     var pageBackdrop by mutableStateOf<BackdropSource?>(null)
+    /** 每次更换背景图自增，用来触发背景重新加载 */
+    var backgroundVersion by mutableIntStateOf(0)
 }
 
 /**
@@ -103,9 +106,9 @@ fun BrowserRoot(
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
 
-    val bgBitmap = HomeBackground.rememberBackgroundBitmap()
-    val backdropNormal = HomeBackground.rememberBackdrop(bgBitmap, extraBlur = 1f)
-    val backdropFocused = HomeBackground.rememberBackdrop(bgBitmap, extraBlur = GlassTokens.focusExtraBlur)
+    val bgImage = HomeBackground.rememberBackground(ui.backgroundVersion)
+    val backdropNormal = HomeBackground.rememberBackdrop(bgImage, extraBlur = 1f)
+    val backdropFocused = HomeBackground.rememberBackdrop(bgImage, extraBlur = GlassTokens.focusExtraBlur)
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val w = constraints.maxWidth.toFloat()
@@ -179,13 +182,13 @@ fun BrowserRoot(
             label = "bgAlpha",
         )
         HomeBackgroundLayer(
-            bitmap = bgBitmap,
+            bitmap = bgImage.bitmap,
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer { alpha = bgAlpha },
         )
         // 聚焦时叠一层模糊版背景并淡入：整屏糊掉，注意力集中到搜索框
-        val blurredBgBitmap = HomeBackground.rememberBlurredBackground(bgBitmap)
+        val blurredBgBitmap = HomeBackground.rememberBlurredBackground(bgImage)
         val bgBlurAlpha by animateFloatAsState(
             targetValue = if (ui.mode == UiMode.Editing) 1f else 0f,
             animationSpec = Springs.gentle,
@@ -422,6 +425,10 @@ fun BrowserRoot(
             ) {
                 BrowserMenu(
                     backdrop = backdrop,
+                    frost = maxOf(
+                        GlassTokens.frostFor(backdrop?.luminance ?: 1f),
+                        GlassTokens.menuMinFrost,
+                    ),
                     onPick = { action ->
                         ui.menuOpen = false
                         onMenuAction(action)

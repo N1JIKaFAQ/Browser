@@ -3,6 +3,7 @@ package com.n1jika.myvia.ui.addressbar
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -26,17 +27,19 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.text.BasicText
+
+/** 地址栏文字颜色：黑色（不发光、不描边）。 */
+private val InkBlack = Color(0xFF15171C)
 
 /**
- * 地址栏内容。极简：没有图标、没有按钮、没有提示文字，只有文字本身。
+ * 地址栏内容。极简：没有图标、没有按钮、没有提示文字，只有文字本身，且水平居中。
  *
- * - 编辑态：可输入的裸文本，回车提交
- * - 浏览态：显示网址；过长时首尾渐隐（网址两端各有 12dp 的柔和消隐），
- *   而不是生硬地截断
+ * - 编辑态：可输入的裸文本，回车（软键盘"前往"或硬件回车）提交
+ * - 浏览态：显示网址；过长时首尾渐隐，而不是生硬截断
  */
 @Composable
 fun AddressBarContent(
@@ -49,16 +52,17 @@ fun AddressBarContent(
     focusRequester: FocusRequester? = null,
 ) {
     val style = TextStyle(
-        color = Color.White.copy(alpha = 0.96f),
+        color = InkBlack,
         fontSize = 15.sp,
-        fontWeight = FontWeight.Normal,
+        fontWeight = FontWeight.Medium,
+        textAlign = TextAlign.Center,
     )
 
     Box(
         modifier = modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp),
-        contentAlignment = Alignment.CenterStart,
+        contentAlignment = Alignment.Center,
     ) {
         if (editing) {
             BasicTextField(
@@ -80,11 +84,11 @@ fun AddressBarContent(
                     },
                 singleLine = true,
                 textStyle = style,
-                cursorBrush = SolidColor(Color.White),
+                cursorBrush = SolidColor(InkBlack),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
                 keyboardActions = KeyboardActions(onGo = { onSubmit() }),
                 decorationBox = { inner ->
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         inner()
                     }
                 },

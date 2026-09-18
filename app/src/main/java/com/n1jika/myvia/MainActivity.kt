@@ -36,6 +36,22 @@ class MainActivity : AppCompatActivity(), BrowserView.BrowserCallback {
     private val currentTab: TabItem?
         get() = pager?.let { tabManager.tabs.getOrNull(it.currentItem) }
 
+    /** 选一张自己的照片当主页背景（同时成为玻璃的折射来源）。 */
+    private val pickBackground = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            }
+            Prefs.setBackgroundUri(this, uri)
+            ui.backgroundVersion++
+        }
+    }
+
     private val currentWebView: BrowserView?
         get() = currentTab?.let { tab ->
             val fragment = supportFragmentManager
@@ -179,6 +195,8 @@ class MainActivity : AppCompatActivity(), BrowserView.BrowserCallback {
 
             MenuAction.Settings -> startActivity(Intent(this, SettingsActivity::class.java))
 
+            MenuAction.BackgroundImage -> pickBackground.launch(arrayOf("image/*"))
+
             // 以下功能在后续阶段实现（P5），先给出明确反馈而不是静默失败
             MenuAction.Bookmarks, MenuAction.History, MenuAction.Downloads,
             MenuAction.Incognito, MenuAction.AddBookmark, MenuAction.Toolbox,
@@ -193,6 +211,7 @@ class MainActivity : AppCompatActivity(), BrowserView.BrowserCallback {
         MenuAction.Incognito -> "隐身"
         MenuAction.AddBookmark -> "添加书签"
         MenuAction.Toolbox -> "工具箱"
+        MenuAction.BackgroundImage -> "背景图"
         else -> ""
     }
 

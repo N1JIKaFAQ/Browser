@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- 深色打底：内容铺满全屏（含状态栏区域），玻璃才能压在背景上延伸 -->
+    <!-- 浅色打底：地址栏与菜单的文字/图标是黑色，需要亮底才读得清；
+         状态栏图标随之改为深色。内容铺满全屏，玻璃才能压在背景上延伸。 -->
     <style name="Theme.MyVia" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="colorPrimary">@color/brand</item>
         <item name="colorSecondary">@color/brand_light</item>
-        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:windowBackground">@color/window_bg</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
-        <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
     </style>
 </resources>

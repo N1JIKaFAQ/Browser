@@ -71,12 +71,12 @@ fun GlassButton(
     }
 }
 
-/** 三条横线（汉堡）图标，纯手绘以便后续做形变动画。 */
+/** 三条横线（汉堡）图标，纯手绘以便后续做形变动画。黑色、不发光。 */
 @Composable
 fun HamburgerIcon(
     modifier: Modifier = Modifier,
     lineWidthFraction: Float = 0.42f,
-    color: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.White,
+    color: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color(0xFF15171C),
 ) {
     androidx.compose.foundation.Canvas(modifier = modifier.size(GlassTokens.menuButtonSize)) {
         val w = size.width * lineWidthFraction

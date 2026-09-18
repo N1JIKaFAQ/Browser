@@ -41,7 +41,7 @@ import com.n1jika.myvia.ui.glass.GlassTokens
 /** 菜单里的功能项。 */
 enum class MenuAction {
     Bookmarks, History, Downloads, Incognito, Share,
-    AddBookmark, DesktopMode, Toolbox, Settings,
+    AddBookmark, DesktopMode, Toolbox, BackgroundImage, Settings,
 }
 
 data class MenuEntry(
@@ -62,6 +62,7 @@ val defaultMenuEntries: List<MenuEntry> = listOf(
     MenuEntry(MenuAction.AddBookmark, "添加书签", MenuIcons.addBookmark),
     MenuEntry(MenuAction.DesktopMode, "电脑模式", MenuIcons.desktop),
     MenuEntry(MenuAction.Toolbox, "工具箱", MenuIcons.toolbox),
+    MenuEntry(MenuAction.BackgroundImage, "背景图", MenuIcons.picture),
     MenuEntry(MenuAction.Settings, "设置", MenuIcons.settings),
 )
 
@@ -76,6 +77,7 @@ fun BrowserMenu(
     backdrop: BackdropSource?,
     onPick: (MenuAction) -> Unit,
     modifier: Modifier = Modifier,
+    frost: Float = -1f,
     entries: List<MenuEntry> = defaultMenuEntries,
 ) {
     val viewportHeight = GlassTokens.menuItemHeight * GlassTokens.menuVisibleItems
@@ -84,6 +86,7 @@ fun BrowserMenu(
         modifier = modifier.width(GlassTokens.menuWidth),
         backdrop = backdrop,
         cornerRadius = GlassTokens.menuCorner,
+        frost = frost,
     ) {
         Column(
             modifier = Modifier
@@ -122,7 +125,7 @@ private fun MenuRow(entry: MenuEntry, onClick: () -> Unit) {
             .fillMaxWidth()
             .height(GlassTokens.menuItemHeight)
             .background(
-                if (pressed) Color.White.copy(alpha = 0.10f) else Color.Transparent,
+                if (pressed) Color.Black.copy(alpha = 0.07f) else Color.Transparent,
             )
             .clickable(
                 interactionSource = interaction,
@@ -138,7 +141,7 @@ private fun MenuRow(entry: MenuEntry, onClick: () -> Unit) {
         BasicText(
             text = entry.label,
             style = TextStyle(
-                color = Color.White.copy(alpha = 0.94f),
+                color = Color(0xFF15171C),
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Medium,
             ),

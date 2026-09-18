@@ -18,7 +18,7 @@ import androidx.compose.ui.graphics.drawscope.translate
  */
 object MenuIcons {
 
-    private val ink = Color.White.copy(alpha = 0.92f)
+    private val ink = Color(0xFF15171C)
 
     private fun DrawScope.u(v: Float): Float = size.minDimension / 24f * v
 
@@ -141,5 +141,28 @@ object MenuIcons {
         }
         drawCircle(ink, outer, c, style = lineStroke())
         drawCircle(ink, u(3f), c, style = lineStroke())
+    }
+
+    /** 背景图（相框 + 山与太阳） */
+    val picture: DrawScope.() -> Unit = {
+        drawRoundRect(
+            color = ink,
+            topLeft = Offset(u(3f), u(4.5f)),
+            size = Size(u(18f), u(15f)),
+            cornerRadius = CornerRadius(u(2.5f)),
+            style = lineStroke(),
+        )
+        // 山
+        val mountain = Path().apply {
+            moveTo(u(3f), u(17f))
+            lineTo(u(9.5f), u(11f))
+            lineTo(u(14f), u(15.5f))
+            lineTo(u(16.5f), u(13.5f))
+            lineTo(u(21f), u(17f))
+            close()
+        }
+        drawPath(mountain, ink)
+        // 太阳
+        drawCircle(ink, u(2f), Offset(u(8.5f), u(8f)), style = lineStroke(1.4f))
     }
 }

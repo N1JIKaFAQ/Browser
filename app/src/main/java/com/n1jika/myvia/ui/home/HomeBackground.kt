@@ -1,12 +1,15 @@
 package com.n1jika.myvia.ui.home
 
+import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.RadialGradient
 import android.graphics.Shader
-import androidx.compose.foundation.Canvas
+import android.net.Uri
+import androidx.compose.foundation.Canvas as ComposeCanvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,90 +19,165 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntSize
+import com.n1jika.myvia.Prefs
 import com.n1jika.myvia.ui.glass.BackdropSource
 import com.n1jika.myvia.ui.glass.FastBlur
+import kotlin.random.Random
+
+/** 主页背景位图 + 它相对屏幕的缩放比（位图像素 / 屏幕像素）。 */
+class HomeBackgroundImage(
+    val bitmap: Bitmap,
+    /** 位图像素 / 屏幕像素 */
+    val scale: Float,
+)
 
 /**
  * 主页背景。
  *
- * 默认是一张程序生成的"子夜青"渐变（不用内置图片资源，装完就有好看的底），
- * 后续在"定制 → 背景"里可以换成用户自己的图。
- *
- * 同一个位图两用：放大铺满作为可见背景，另存一份模糊的小图给玻璃做透视源，
- * 所以玻璃里透出来的正是它背后这块背景，颜色和明暗天然对得上。
+ * - 默认：浅色中性渐变 + 细密噪点纹理。**纹理很重要**——液态玻璃的折射只有在有细节的
+ *   背景上才看得出来，纯色/纯渐变背景上折射是不可见的。
+ * - 用户可在下拉菜单里选自己的照片，选完即成为背景，同时也成为玻璃的折射来源。
+ * - 浅色打底还有个前提意义：地址栏与菜单的文字/图标是黑色，需要亮底才读得清；
+ *   万一用户选了暗照片，玻璃会自动加厚霜化（见 GlassTokens.frostFor）。
  */
 object HomeBackground {
 
-    /** 背景位图相对屏幕的降采样倍率 */
-    private const val SCALE = 1f / 4f
+    /** 生成/解码出来的背景相对屏幕的缩放比 */
+    private const val GENERATED_SCALE = 1f / 4f
 
     @Composable
-    fun rememberBackgroundBitmap(): Bitmap {
-        val density = LocalDensity.current
+    fun rememberBackground(version: Int): HomeBackgroundImage {
         val context = LocalContext.current
-        val widthPx = context.resources.displayMetrics.widthPixels
-        val heightPx = context.resources.displayMetrics.heightPixels
-        return remember(widthPx, heightPx, density.density) {
-            generateGradient(
-                (widthPx * SCALE).toInt().coerceAtLeast(2),
-                (heightPx * SCALE).toInt().coerceAtLeast(2),
+        val metrics = context.resources.displayMetrics
+        val w = metrics.widthPixels
+        val h = metrics.heightPixels
+        return remember(version, w, h) {
+            val uri = Prefs.backgroundUri(context)
+            val user = uri?.let { decodeUserImage(context, it, w, h) }
+            user ?: HomeBackgroundImage(
+                bitmap = generateDefault(
+                    (w * GENERATED_SCALE).toInt().coerceAtLeast(2),
+                    (h * GENERATED_SCALE).toInt().coerceAtLeast(2),
+                ),
+                scale = GENERATED_SCALE,
             )
         }
     }
 
     @Composable
-    fun rememberBackdrop(bitmap: Bitmap, extraBlur: Float = 1f): BackdropSource =
-        remember(bitmap, extraBlur) {
-            BackdropSource.fromScaledBitmap(bitmap, SCALE, extraBlur = extraBlur)
+    fun rememberBackdrop(image: HomeBackgroundImage, extraBlur: Float = 1f): BackdropSource =
+        remember(image, extraBlur) {
+            BackdropSource.fromScreen(
+                image.bitmap,
+                inputScale = image.scale,
+                extraBlur = extraBlur,
+            )
         }
+
+    /** 可见背景的模糊版：聚焦搜索框时叠一层淡入，做出"整屏糊掉"的效果。 */
+    @Composable
+    fun rememberBlurredBackground(image: HomeBackgroundImage, radius: Float = 4f): Bitmap =
+        remember(image, radius) {
+            FastBlur.blur(image.bitmap, radius.toInt().coerceAtLeast(1))
+        }
+
+    /** 解码用户选的照片，按屏幕尺寸做 2 倍降采样，兼顾清晰度与内存。 */
+    private fun decodeUserImage(context: Context, uri: Uri, screenW: Int, screenH: Int): HomeBackgroundImage? =
+        runCatching {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            context.contentResolver.openInputStream(uri)?.use {
+                BitmapFactory.decodeStream(it, null, bounds)
+            }
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+
+            var sample = 1
+            while (bounds.outWidth / (sample * 2) >= screenW / 2 &&
+                bounds.outHeight / (sample * 2) >= screenH / 2
+            ) {
+                sample *= 2
+            }
+            val opts = BitmapFactory.Options().apply {
+                inSampleSize = sample
+                inPreferredConfig = Bitmap.Config.ARGB_8888
+            }
+            val bitmap = context.contentResolver.openInputStream(uri)?.use {
+                BitmapFactory.decodeStream(it, null, opts)
+            } ?: return null
+
+            HomeBackgroundImage(bitmap, bitmap.width.toFloat() / screenW.toFloat())
+        }.getOrNull()
 
     /**
-     * 可见背景的"高斯模糊版"。
-     * 搜索框聚焦时用它叠一层淡入，做出"整屏背景糊掉、把注意力交给搜索框"的效果。
-     * 位图本来就只有 1/4 分辨率，再糊一次几乎不花时间。
+     * 默认背景：浅灰蓝底 + 斜向柔带 + 若干光斑 + 颗粒。
+     *
+     * **纹理尺度是被刻意放大的**：液态玻璃靠"背景被弯折"来表现自己，
+     * 背景越平滑，玻璃就越像不存在。这里的斜带与光斑在 1/4 缩放的位图上
+     * 仍有数个像素宽，降采样 + 模糊后依然留得住，边缘折射因此可见。
+     * 用固定随机种子，保证每次生成一致（不会闪）。
      */
-    @Composable
-    fun rememberBlurredBackground(bitmap: Bitmap, scale: Float = 3.5f): Bitmap =
-        remember(bitmap, scale) {
-            FastBlur.blur(bitmap, scale.toInt().coerceAtLeast(1))
-        }
-
-    /** 程序生成的渐变底：深海蓝 → 青绿 → 靛紫，带两个柔光斑。 */
-    private fun generateGradient(w: Int, h: Int): Bitmap {
+    private fun generateDefault(w: Int, h: Int): Bitmap {
         val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        val random = Random(20260918)
 
+        // 底色
         paint.shader = LinearGradient(
-            0f, 0f, w * 0.35f, h.toFloat(),
-            intArrayOf(0xFF0A1B2E.toInt(), 0xFF0E3A44.toInt(), 0xFF121F38.toInt()),
+            0f, 0f, w * 0.45f, h.toFloat(),
+            intArrayOf(0xFFF6F8FB.toInt(), 0xFFE7ECF3.toInt(), 0xFFDCE3EC.toInt()),
             floatArrayOf(0f, 0.55f, 1f),
             Shader.TileMode.CLAMP,
         )
         canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), paint)
-
-        // 左上的青绿柔光
-        paint.shader = RadialGradient(
-            w * 0.24f, h * 0.28f, w * 0.72f,
-            intArrayOf(0x8C1F7A6B.toInt(), 0x001F7A6B),
-            floatArrayOf(0f, 1f),
-            Shader.TileMode.CLAMP,
-        )
-        canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), paint)
-
-        // 右下的靛紫柔光
-        paint.shader = RadialGradient(
-            w * 0.86f, h * 0.74f, w * 0.66f,
-            intArrayOf(0x7A3B4C8A.toInt(), 0x003B4C8A),
-            floatArrayOf(0f, 1f),
-            Shader.TileMode.CLAMP,
-        )
-        canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), paint)
-
         paint.shader = null
+
+        // 斜向柔带：给边缘折射提供长条形的高频参照
+        val bandCount = 7
+        repeat(bandCount) { i ->
+            val t = (i + 1f) / (bandCount + 1f)
+            val x = w * (t * 1.3f - 0.15f)
+            val halfWidth = w * (0.03f + random.nextFloat() * 0.05f)
+            paint.color = if (i % 2 == 0) 0x14FFFFFF else 0x12000000
+            paint.alpha = (0x10 + random.nextInt(0x12))
+            val path = android.graphics.Path().apply {
+                moveTo(x - halfWidth, -h * 0.1f)
+                lineTo(x + halfWidth, -h * 0.1f)
+                lineTo(x + halfWidth * 1.6f + w * 0.25f, h * 1.1f)
+                lineTo(x - halfWidth * 1.6f + w * 0.25f, h * 1.1f)
+                close()
+            }
+            canvas.drawPath(path, paint)
+        }
+
+        // 光斑：局部色相与明度变化，让玻璃内部"透出"的东西有层次
+        repeat(14) {
+            val cx = random.nextFloat() * w
+            val cy = random.nextFloat() * h
+            val radius = (0.10f + random.nextFloat() * 0.22f) * w
+            val cool = random.nextBoolean()
+            val color = if (cool) 0x3FA8BCD6 else 0x33D8C7A8
+            paint.shader = RadialGradient(
+                cx, cy, radius,
+                intArrayOf(color.toInt(), color and 0x00FFFFFF),
+                floatArrayOf(0f, 1f),
+                Shader.TileMode.CLAMP,
+            )
+            canvas.drawRect(0f, 0f, w.toFloat(), h.toFloat(), paint)
+        }
+        paint.shader = null
+
+        // 粗颗粒：降采样后仍能留下，是折射最容易看出来的细节
+        val dots = (w * h) / 160
+        repeat(dots) {
+            val x = random.nextFloat() * w
+            val y = random.nextFloat() * h
+            val radius = 0.8f + random.nextFloat() * 1.8f
+            val dark = random.nextBoolean()
+            paint.color = if (dark) 0x1A000000 else 0x1CFFFFFF
+            canvas.drawCircle(x, y, radius, paint)
+        }
         return bitmap
     }
 }
@@ -107,16 +185,16 @@ object HomeBackground {
 /** 铺满全屏的背景层。 */
 @Composable
 fun HomeBackgroundLayer(bitmap: Bitmap, modifier: Modifier = Modifier) {
-    Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize().background(Color.White)) {
+        ComposeCanvas(modifier = Modifier.fillMaxSize()) {
             drawImage(
                 image = bitmap.asImageBitmap(),
-                srcSize = androidx.compose.ui.unit.IntSize(bitmap.width, bitmap.height),
-                dstSize = androidx.compose.ui.unit.IntSize(
+                srcSize = IntSize(bitmap.width, bitmap.height),
+                dstSize = IntSize(
                     size.width.toInt().coerceAtLeast(1),
                     size.height.toInt().coerceAtLeast(1),
                 ),
-                filterQuality = FilterQuality.Low,
+                filterQuality = FilterQuality.Medium,
             )
         }
     }

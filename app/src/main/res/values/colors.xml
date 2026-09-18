@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="brand">#00695C</color>
-    <color name="brand_light">#4DB6AC</color>
-    <color name="address_bg">#22000000</color>
-    <color name="address_bg_dark">#22FFFFFF</color>
+    <!-- 中性色：玻璃方案里不再使用青绿，避免任何组件泛绿 -->
+    <color name="brand">#2A2E37</color>
+    <color name="brand_light">#5A6070</color>
+    <color name="window_bg">#F2F4F7</color>
 </resources>

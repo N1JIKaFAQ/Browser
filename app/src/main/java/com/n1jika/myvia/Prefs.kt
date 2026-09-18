@@ -13,6 +13,8 @@ object Prefs {
     const val UA_MODE = "pref_ua_mode"
     const val NO_IMAGE = "pref_no_image"
     const val CUSTOM_BLOCK_HOSTS = "pref_custom_block_hosts"
+    /** 用户自选的主页背景图 URI（持久化授权） */
+    const val BACKGROUND_URI = "pref_background_uri"
 
     /** UA 模式取值。 */
     const val UA_DEFAULT = "0"          // Via 风格：隐藏标识
@@ -35,6 +37,17 @@ object Prefs {
 
     fun noImageEnabled(context: Context): Boolean =
         get(context).getBoolean(NO_IMAGE, false)
+
+    /** 用户自选的主页背景图；未设置返回 null。 */
+    fun backgroundUri(context: Context): android.net.Uri? =
+        get(context).getString(BACKGROUND_URI, null)?.takeIf { it.isNotBlank() }
+            ?.let { android.net.Uri.parse(it) }
+
+    fun setBackgroundUri(context: Context, uri: android.net.Uri?) {
+        get(context).edit().apply {
+            if (uri == null) remove(BACKGROUND_URI) else putString(BACKGROUND_URI, uri.toString())
+        }.apply()
+    }
 
     fun userAgent(context: Context, default: String): String =
         when (get(context).getString(UA_MODE, UA_DEFAULT)) {
