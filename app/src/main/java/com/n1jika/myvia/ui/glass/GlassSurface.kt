@@ -67,6 +67,7 @@ uniform float  uSpan;         // 轮廓光渐变跨度
 uniform float  uProgress;     // 流光进度（负值=不显示）
 uniform float  uRimAlpha;     // 流光强度
 uniform float  uRimTail;      // 流光尾部锐度
+uniform float3 uEdge;         // 高光/描边基色（随背景明暗自适应：亮底深灰、暗底白）
 
 const float PI = 3.14159265359;
 
@@ -129,7 +130,7 @@ half4 main(float2 fragCoord) {
         highlight = max(highlight, streak * gate * uRimAlpha);
     }
 
-    c.rgb = mix(c.rgb, float3(1.0), clamp(highlight * uHighlightOpacity, 0.0, 1.0));
+    c.rgb = mix(c.rgb, uEdge, clamp(highlight * uHighlightOpacity, 0.0, 1.0));
     return half4(c.rgb, inside);
 }
 """
@@ -150,6 +151,7 @@ private class GlassShaderRenderer {
         frost: Float,
         rimProgress: Float?,
         rimAlpha: Float,
+        edge: Color,
     ) {
         if (attachedBitmap !== backdrop.bitmap) {
             shader.setInputShader(
@@ -176,6 +178,7 @@ private class GlassShaderRenderer {
         shader.setFloatUniform("uProgress", rimProgress ?: -1f)
         shader.setFloatUniform("uRimAlpha", rimAlpha)
         shader.setFloatUniform("uRimTail", GlassTokens.rimTail)
+        shader.setFloatUniform("uEdge", edge.red, edge.green, edge.blue)
 
         paint.shader = shader
         canvas.drawRect(0f, 0f, size.width, size.height, paint)
@@ -207,6 +210,7 @@ fun GlassSurface(
 
     val effectiveFrost = if (frost >= 0f) frost
     else GlassTokens.frostFor(backdrop?.contentLuminance ?: 1f)
+    val edgeColor = GlassTokens.edgeColorFor(backdrop?.contentLuminance ?: 1f)
 
     // 着色器失败不崩溃：降级为霜化玻璃并记录原因
     val renderer = remember {
@@ -235,6 +239,7 @@ fun GlassSurface(
                                 frost = effectiveFrost,
                                 rimProgress = rimProgress,
                                 rimAlpha = rimAlpha,
+                                edge = edgeColor,
                             )
                         }
                     }.onFailure { error ->
@@ -245,7 +250,7 @@ fun GlassSurface(
                     false
                 }
                 if (!drew) drawFrostedFallback(backdrop, bounds, radiusPx, effectiveFrost)
-                drawGlassEdge(radiusPx)
+                drawGlassEdge(radiusPx, edgeColor)
             },
         content = content,
     )
@@ -283,16 +288,16 @@ private fun DrawScope.drawFrostedFallback(
     drawRoundRect(color = Color.White.copy(alpha = frost), cornerRadius = corner)
 }
 
-/** 边缘：单层 1px 描边，上亮下弱（方向性），不带任何泛光。 */
-private fun DrawScope.drawGlassEdge(radiusPx: Float) {
+/** 边缘：单层 1px 描边，颜色随背景自适应（亮底深灰边、暗底白边），上亮下弱。 */
+private fun DrawScope.drawGlassEdge(radiusPx: Float, edgeColor: Color) {
     drawRoundRect(
         brush = Brush.verticalGradient(
             colors = listOf(
-                Color.White.copy(alpha = GlassTokens.borderTopAlpha),
-                Color.White.copy(alpha = GlassTokens.borderBottomAlpha),
+                edgeColor.copy(alpha = GlassTokens.borderTopAlpha),
+                edgeColor.copy(alpha = GlassTokens.borderBottomAlpha),
             ),
         ),
         cornerRadius = CornerRadius(radiusPx),
-        style = Stroke(width = 1f),
+        style = Stroke(width = 1.1f),
     )
 }

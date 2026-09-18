@@ -60,7 +60,7 @@ object GlassTokens {
      * 玻璃本体霜化程度（薄，追求通透）。背景亮→更薄、暗→略厚，但整体仍透明。
      * 可读性交给文字自适应色（[contentColorFor]），而不是靠把玻璃糊白。
      */
-    const val frostOnLight = 0.06f
+    const val frostOnLight = 0.16f
     const val frostOnDark = 0.14f
 
     /** 菜单面板霜化：条目背后压着网页正文，需要更实的底 + 黑字才读得清 */
@@ -83,6 +83,13 @@ object GlassTokens {
      */
     fun contentColorFor(luminance: Float): Color =
         if (luminance >= 0.5f) InkDark else InkLight
+
+    /**
+     * 玻璃的高光/描边颜色，随背景明暗自适应：
+     * 亮底用偏冷的深灰边（在浅色页面上才看得见玻璃轮廓），暗底用白色边。
+     */
+    fun edgeColorFor(luminance: Float): Color =
+        if (luminance >= 0.5f) Color(0xFF3A3F47) else Color.White
 
     /** 边缘描边：1px，方向性（上亮下弱）。很低，只勾轮廓不发光。 */
     const val borderTopAlpha = 0.28f

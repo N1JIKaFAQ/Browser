@@ -1,6 +1,7 @@
 package com.n1jika.myvia.ui
 
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Rect
 import android.os.Handler
 import android.os.Looper
@@ -46,36 +47,56 @@ object ScreenCapture {
 
     /**
      * 只抓窗口里 `rect`（屏幕坐标）这一块，转成带原点的玻璃源。
-     * 回调在抓帧完成时于主线程触发；失败回调 null（调用方保留上一帧）。
+     *
+     * 优先用 [sourceView]（当前 WebView）**软件绘制**出该区域的实时网页像素——
+     * PixelCopy 抓 WebView 合成层在部分机型（尤其 ColorOS）拿不到内容、会退化成
+     * 壁纸或黑块；而 `View.draw()` 能稳定拿到网页当前画面（含滚动位置）。
+     * sourceView 不可用时再退回 PixelCopy。回调在主线程触发。
      */
     fun captureRegion(
         window: Window?,
         rect: Rect,
+        sourceView: View? = null,
         onResult: (BackdropSource?) -> Unit,
     ) {
         val decor: View = window?.decorView ?: return onResult(null)
-        val clamp = Rect(rect).apply {
-            intersect(0, 0, decor.width, decor.height)
-        }
+        val clamp = Rect(rect).apply { intersect(0, 0, decor.width, decor.height) }
         if (clamp.width() <= 0 || clamp.height() <= 0) return onResult(null)
 
+        val origin = Offset(clamp.left.toFloat(), clamp.top.toFloat())
+
+        if (sourceView != null && sourceView.width > 0 && sourceView.height > 0) {
+            val shot = Bitmap.createBitmap(clamp.width(), clamp.height(), Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(shot)
+            canvas.translate(-clamp.left.toFloat(), -clamp.top.toFloat())
+            runCatching { sourceView.draw(canvas) }
+                .onFailure {
+                    shot.recycle()
+                    captureViaPixelCopy(window, clamp, origin, onResult)
+                    return
+                }
+            onResult(BackdropSource.fromRegion(shot, origin))
+            return
+        }
+        captureViaPixelCopy(window, clamp, origin, onResult)
+    }
+
+    private fun captureViaPixelCopy(
+        window: Window,
+        clamp: Rect,
+        origin: Offset,
+        onResult: (BackdropSource?) -> Unit,
+    ) {
         val region = Bitmap.createBitmap(clamp.width(), clamp.height(), Bitmap.Config.ARGB_8888)
         runCatching {
             PixelCopy.request(
-                window!!,
+                window,
                 clamp,
                 region,
                 PixelCopy.OnPixelCopyFinishedListener { r: Int ->
-                    if (r == PixelCopy.SUCCESS) {
-                        onResult(
-                            BackdropSource.fromRegion(
-                                region,
-                                Offset(clamp.left.toFloat(), clamp.top.toFloat()),
-                            ),
-                        )
-                    } else {
-                        onResult(null)
-                    }
+                    onResult(
+                        if (r == PixelCopy.SUCCESS) BackdropSource.fromRegion(region, origin) else null,
+                    )
                 },
                 main,
             )

@@ -80,6 +80,7 @@ class MainActivity : AppCompatActivity(), BrowserView.BrowserCallback {
                     tabAdapter = tabAdapter,
                     onNavigate = ::navigate,
                     onMenuAction = ::handleMenuAction,
+                    webViewProvider = { currentWebView },
                     onPagerCreated = { created ->
                         pager = created
                         if (tabManager.size == 0) openNewTab(Prefs.homeUrl(this@MainActivity))
@@ -94,8 +95,7 @@ class MainActivity : AppCompatActivity(), BrowserView.BrowserCallback {
                 when {
                     ui.menuOpen -> ui.menuOpen = false
 
-                    ui.mode == UiMode.Editing ->
-                        ui.mode = if (ui.currentUrl.isNotBlank()) UiMode.Browsing else UiMode.Home
+                    ui.mode == UiMode.Editing -> ui.mode = ui.modeBeforeEditing
 
                     ui.mode == UiMode.Browsing && currentWebView?.canGoBack() == true ->
                         currentWebView?.goBack()

@@ -92,46 +92,35 @@ fun AddressBarContent(
                 },
             )
         } else {
-            FadingEdges {
+            // 外层盒负责两端渐隐遮罩，内层用 Center 对齐 + 内容宽度 → 文字真正几何居中
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                    .drawWithContent {
+                        drawContent()
+                        val f = 0.16f
+                        drawRect(
+                            brush = Brush.horizontalGradient(
+                                0f to Color.Transparent,
+                                f * 0.4f to Color.Black.copy(alpha = 0.5f),
+                                f to Color.Black,
+                                (1f - f) to Color.Black,
+                                (1f - f * 0.4f) to Color.Black.copy(alpha = 0.5f),
+                                1f to Color.Transparent,
+                            ),
+                            blendMode = BlendMode.DstIn,
+                        )
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
                 BasicText(
                     text = url,
                     maxLines = 1,
                     overflow = TextOverflow.Clip,
                     style = style,
-                    modifier = Modifier.fillMaxSize(),
                 )
             }
         }
-    }
-}
-
-/** 首尾渐隐：两端各一段柔和的高斯式 alpha 衰减，读起来是"还有更多"而不是"被切断"。 */
-@Composable
-private fun FadingEdges(
-    fadeFraction: Float = 0.16f,
-    content: @Composable () -> Unit,
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-            .drawWithContent {
-                drawContent()
-                val f = fadeFraction.coerceIn(0.02f, 0.45f)
-                // 多段 alpha 曲线近似高斯：0 → 0.35 → 1 → 1 → 0.35 → 0
-                drawRect(
-                    brush = Brush.horizontalGradient(
-                        0f to Color.Transparent,
-                        f * 0.4f to Color.Black.copy(alpha = 0.55f),
-                        f to Color.Black,
-                        (1f - f) to Color.Black,
-                        (1f - f * 0.4f) to Color.Black.copy(alpha = 0.55f),
-                        1f to Color.Transparent,
-                    ),
-                    blendMode = BlendMode.DstIn,
-                )
-            },
-    ) {
-        content()
     }
 }

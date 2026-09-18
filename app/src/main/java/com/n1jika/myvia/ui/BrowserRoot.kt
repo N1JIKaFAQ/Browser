@@ -82,6 +82,8 @@ class BrowserUiState {
     var loading by mutableStateOf(false)
     var menuOpen by mutableStateOf(false)
     var pageBackdrop by mutableStateOf<BackdropSource?>(null)
+    /** 进入编辑态前所处的模式，返回时精确还原（Home 回主页、Browsing 回原页面） */
+    var modeBeforeEditing by mutableStateOf(UiMode.Home)
     /** 每次更换背景图自增，用来触发背景重新加载 */
     var backgroundVersion by mutableIntStateOf(0)
 }
@@ -101,6 +103,7 @@ fun BrowserRoot(
     onNavigate: (String) -> Unit,
     onMenuAction: (MenuAction) -> Unit,
     onPagerCreated: (ViewPager2) -> Unit,
+    webViewProvider: () -> android.view.View?,
 ) {
     val density = LocalDensity.current
     val haptic = rememberHaptics()
@@ -200,6 +203,7 @@ fun BrowserRoot(
                     ScreenCapture.captureRegion(
                         window = window,
                         rect = android.graphics.Rect(0, 0, w.toInt(), bandBottom.toInt()),
+                        sourceView = webViewProvider(),
                     ) { bd ->
                         busy = false
                         if (bd != null) ui.pageBackdrop = bd
@@ -386,6 +390,7 @@ fun BrowserRoot(
                         .fillMaxSize()
                         .pointerInput(ui.mode) {
                             detectTapNoRipple {
+                                ui.modeBeforeEditing = ui.mode
                                 ui.query = if (ui.mode == UiMode.Browsing) ui.currentUrl else ""
                                 ui.mode = UiMode.Editing
                                 haptic(Kind.Tick)
