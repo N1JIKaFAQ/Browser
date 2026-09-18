@@ -205,7 +205,8 @@ fun GlassSurface(
     var bounds by remember { mutableStateOf(Rect.Zero) }
     var shaderBroken by remember { mutableStateOf(false) }
 
-    val effectiveFrost = if (frost >= 0f) frost else GlassTokens.frostFor(backdrop?.luminance ?: 1f)
+    val effectiveFrost = if (frost >= 0f) frost
+    else GlassTokens.frostFor(backdrop?.contentLuminance ?: 1f)
 
     // 着色器失败不崩溃：降级为霜化玻璃并记录原因
     val renderer = remember {

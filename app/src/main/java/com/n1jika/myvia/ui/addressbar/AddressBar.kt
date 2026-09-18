@@ -32,28 +32,26 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/** 地址栏文字颜色：黑色（不发光、不描边）。 */
-private val InkBlack = Color(0xFF15171C)
-
 /**
- * 地址栏内容。极简：没有图标、没有按钮、没有提示文字，只有文字本身，且水平居中。
+ * 地址栏内容。极简：无图标、无按钮、无提示文字，只有居中的文字本身。
  *
- * - 编辑态：可输入的裸文本，回车（软键盘"前往"或硬件回车）提交
- * - 浏览态：显示网址；过长时首尾渐隐，而不是生硬截断
+ * - 颜色自适应（[contentColor]）：浅底黑字、深底白字，配合透明玻璃在任何网站可读
+ * - 浏览态：网址**几何居中**，过长时两端羽化渐隐（近似高斯）而非省略号硬切
  */
 @Composable
 fun AddressBarContent(
     text: String,
     url: String,
     editing: Boolean,
+    contentColor: Color,
     onTextChange: (String) -> Unit,
     onSubmit: () -> Unit,
     modifier: Modifier = Modifier,
     focusRequester: FocusRequester? = null,
 ) {
     val style = TextStyle(
-        color = InkBlack,
-        fontSize = 15.sp,
+        color = contentColor,
+        fontSize = 17.sp,
         fontWeight = FontWeight.Medium,
         textAlign = TextAlign.Center,
     )
@@ -61,7 +59,7 @@ fun AddressBarContent(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = 18.dp),
         contentAlignment = Alignment.Center,
     ) {
         if (editing) {
@@ -84,7 +82,7 @@ fun AddressBarContent(
                     },
                 singleLine = true,
                 textStyle = style,
-                cursorBrush = SolidColor(InkBlack),
+                cursorBrush = SolidColor(contentColor),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
                 keyboardActions = KeyboardActions(onGo = { onSubmit() }),
                 decorationBox = { inner ->
@@ -98,7 +96,7 @@ fun AddressBarContent(
                 BasicText(
                     text = url,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                    overflow = TextOverflow.Clip,
                     style = style,
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -107,10 +105,10 @@ fun AddressBarContent(
     }
 }
 
-/** 首尾渐隐：内容两端各 12dp 溶进玻璃里，读起来是"还有更多"而不是"被切断"。 */
+/** 首尾渐隐：两端各一段柔和的高斯式 alpha 衰减，读起来是"还有更多"而不是"被切断"。 */
 @Composable
 private fun FadingEdges(
-    fadeWidth: androidx.compose.ui.unit.Dp = 12.dp,
+    fadeFraction: Float = 0.16f,
     content: @Composable () -> Unit,
 ) {
     Box(
@@ -119,12 +117,15 @@ private fun FadingEdges(
             .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
             .drawWithContent {
                 drawContent()
-                val fadePx = fadeWidth.toPx()
+                val f = fadeFraction.coerceIn(0.02f, 0.45f)
+                // 多段 alpha 曲线近似高斯：0 → 0.35 → 1 → 1 → 0.35 → 0
                 drawRect(
                     brush = Brush.horizontalGradient(
                         0f to Color.Transparent,
-                        fadePx / size.width to Color.Black,
-                        (size.width - fadePx) / size.width to Color.Black,
+                        f * 0.4f to Color.Black.copy(alpha = 0.55f),
+                        f to Color.Black,
+                        (1f - f) to Color.Black,
+                        (1f - f * 0.4f) to Color.Black.copy(alpha = 0.55f),
                         1f to Color.Transparent,
                     ),
                     blendMode = BlendMode.DstIn,

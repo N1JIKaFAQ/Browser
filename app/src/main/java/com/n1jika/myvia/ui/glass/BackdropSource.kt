@@ -2,29 +2,37 @@ package com.n1jika.myvia.ui.glass
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Paint
 import android.graphics.Rect
 import androidx.compose.runtime.Immutable
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 
 /**
- * 玻璃所"透视"的背景来源。
+ * 玻璃"透视"的背景来源。
  *
- * 为了性能，背景一律先降采样再模糊：位图尺寸只有屏幕的 1/[scale] 分之一。
- * [scale] = 位图像素 / 屏幕像素，玻璃按自身在屏幕上的位置换算采样坐标。
+ * [bitmap] 覆盖屏幕上的一个矩形区域（全屏，或仅顶部条带）；
+ * [originScreen] 是该区域左上角的**屏幕坐标**；
+ * [scale] = 位图像素 / 屏幕像素。
+ * 于是屏幕坐标到位图坐标：`toBitmapX(x) = (x - originScreen.x) * scale`。
  */
 @Immutable
 class BackdropSource(
     val bitmap: Bitmap,
     /** 位图像素 / 屏幕像素 */
     val scale: Float,
+    /** 位图覆盖区域的左上角屏幕坐标 */
+    val originScreen: Offset = Offset.Zero,
 ) {
     val image: ImageBitmap by lazy { bitmap.asImageBitmap() }
 
+    fun toBitmapX(viewX: Float): Float = (viewX - originScreen.x) * scale
+    fun toBitmapY(viewY: Float): Float = (viewY - originScreen.y) * scale
+
     /**
      * 背景平均明度（0=全黑，1=全白）。
-     * 用于自适应玻璃霜化程度：背景越暗，玻璃越白，保证黑字可读。
-     * 采样步长取 4，几万个像素的遍历在毫秒级。
+     * 用于：① 玻璃霜化程度；② 文字/图标在黑↔白之间自适应切换。
      */
     val luminance: Float by lazy {
         val w = bitmap.width
@@ -47,32 +55,63 @@ class BackdropSource(
         if (count == 0) 1f else (sum / count).toFloat().coerceIn(0f, 1f)
     }
 
-    /** 把屏幕坐标换算成位图坐标。 */
-    fun toBitmapX(viewX: Float): Float = viewX * scale
-    fun toBitmapY(viewY: Float): Float = viewY * scale
+    /** 裁掉边缘一圈再算明度：边缘常被轮廓光提亮，会误导明度判断。 */
+    val contentLuminance: Float by lazy {
+        val cx = bitmap.width / 2f
+        val cy = bitmap.height / 2f
+        val pixels = IntArray(bitmap.width * bitmap.height).also {
+            bitmap.getPixels(it, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+        }
+        var sum = 0.0
+        var count = 0
+        val inset = minOf(bitmap.width, bitmap.height) * 0.28f
+        var y = 0
+        while (y < bitmap.height) {
+            var x = 0
+            while (x < bitmap.width) {
+                if (x >= inset && x <= bitmap.width - inset &&
+                    y >= inset && y <= bitmap.height - inset
+                ) {
+                    val c = pixels[y * bitmap.width + x]
+                    sum += 0.2126f * (c shr 16 and 0xFF) / 255f +
+                        0.7152f * (c shr 8 and 0xFF) / 255f +
+                        0.0722f * (c and 0xFF) / 255f
+                    count++
+                }
+                x += 4
+            }
+            y += 4
+        }
+        if (count == 0) luminance else (sum / count).toFloat().coerceIn(0f, 1f)
+    }
 
     companion object {
         val EMPTY = BackdropSource(Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888), 1f)
 
-        /** 从一张已经是"降采样尺寸"的位图生成背景源（[scale] = 位图像素/屏幕像素）。 */
-        fun fromScaledBitmap(
-            bitmap: Bitmap,
-            scale: Float,
+        /** 从一块**已按区域裁好**的位图生成（供实时抓帧用）。 */
+        fun fromRegion(
+            region: Bitmap,
+            originScreen: Offset,
+            downscale: Float = GlassTokens.backdropDownscale,
             blurRadius: Float = GlassTokens.backdropBlurRadius,
-            extraBlur: Float = 1f,
         ): BackdropSource {
-            val blurred = FastBlur.blur(
-                bitmap,
-                (blurRadius * extraBlur).toInt().coerceAtLeast(1),
+            val step = downscale.coerceAtLeast(1f)
+            val w = (region.width / step).toInt().coerceAtLeast(1)
+            val h = (region.height / step).toInt().coerceAtLeast(1)
+            val small = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            Canvas(small).drawBitmap(
+                region,
+                Rect(0, 0, region.width, region.height),
+                Rect(0, 0, w, h),
+                Paint(Paint.FILTER_BITMAP_FLAG),
             )
-            return BackdropSource(blurred, scale)
+            val blurred = FastBlur.blur(small, (blurRadius / step).toInt().coerceAtLeast(1))
+            return BackdropSource(blurred, 1f / step, originScreen)
         }
 
         /**
-         * 从一张背景图生成玻璃可用的采样源：降采样 → 模糊。
-         *
-         * @param inputScale 输入位图相对**屏幕**的缩放比（生成的小图传 1/4，整屏截图传 1）
-         * @param extraBlur 聚焦时背景更糊的倍率
+         * 从一张背景图（整屏或缩略）生成玻璃采样源：降采样 → 模糊。
+         * @param inputScale 输入位图相对**屏幕**的缩放比（生成小图传 1/4，整屏截图传 1）
          */
         fun fromScreen(
             screen: Bitmap,
@@ -89,11 +128,13 @@ class BackdropSource(
                 screen,
                 Rect(0, 0, screen.width, screen.height),
                 Rect(0, 0, w, h),
-                android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG),
+                Paint(Paint.FILTER_BITMAP_FLAG),
             )
-            val blurred = FastBlur.blur(small, (blurRadius * extraBlur / step).toInt().coerceAtLeast(1))
-            // 位图像素 / 屏幕像素：输入自身的缩放比再除以这次降采样
-            return BackdropSource(blurred, inputScale / step)
+            val blurred = FastBlur.blur(
+                small,
+                (blurRadius * extraBlur / step).toInt().coerceAtLeast(1),
+            )
+            return BackdropSource(blurred, inputScale / step, Offset.Zero)
         }
     }
 }

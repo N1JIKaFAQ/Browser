@@ -93,8 +93,9 @@ object HomeBackground {
             if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
 
             var sample = 1
-            while (bounds.outWidth / (sample * 2) >= screenW / 2 &&
-                bounds.outHeight / (sample * 2) >= screenH / 2
+            // 目标：解码尺寸 >= 屏幕（裁切后我们已导出到屏幕分辨率，通常 sample=1，不降采样）
+            while (bounds.outWidth / (sample * 2) >= screenW &&
+                bounds.outHeight / (sample * 2) >= screenH
             ) {
                 sample *= 2
             }

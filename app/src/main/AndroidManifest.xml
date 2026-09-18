@@ -35,6 +35,11 @@
             android:name=".settings.SettingsActivity"
             android:exported="false"
             android:label="@string/settings" />
+
+        <activity
+            android:name=".ui.home.BackgroundCropActivity"
+            android:exported="false"
+            android:theme="@style/Theme.MyVia" />
     </application>
 
 </manifest>

@@ -1,5 +1,6 @@
 package com.n1jika.myvia.ui.glass
 
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
 /**
@@ -51,32 +52,41 @@ object GlassTokens {
     const val highlightRightCenter = 0.251f
     /** 轮廓光渐变跨度（原帖 50/255） */
     const val highlightSpan = 0.196f
-    /** 轮廓光最大不透明度 */
-    const val highlightOpacity = 0.85f
+    /** 轮廓光最大不透明度（细亮边，不是泛光；太高会在字周围形成光晕） */
+    const val highlightOpacity = 0.72f
 
     // ---------- 玻璃本体（霜化，不是发光） ----------
     /**
-     * 玻璃本体的霜化程度：背景亮时用低值（黑字清晰、折射明显），
-     * 背景暗时提高，避免黑字看不清。由 [com.n1jika.myvia.ui.glass.BackdropSource.luminance] 插值。
+     * 玻璃本体霜化程度（薄，追求通透）。背景亮→更薄、暗→略厚，但整体仍透明。
+     * 可读性交给文字自适应色（[contentColorFor]），而不是靠把玻璃糊白。
      */
-    const val frostOnLight = 0.16f
-    const val frostOnDark = 0.55f
+    const val frostOnLight = 0.06f
+    const val frostOnDark = 0.14f
 
-    /** 菜单面板的最小霜化：条目背后压着网页正文，需要更实的底才读得清 */
-    const val menuMinFrost = 0.34f
+    /** 菜单面板霜化：条目背后压着网页正文，需要更实的底 + 黑字才读得清 */
+    const val menuFrost = 0.42f
 
     /**
-     * 按背景明度取霜化程度：背景越暗，玻璃越"厚"（越白），
-     * 这样黑色文字/图标在任何背景图上都能看清。
+     * 按背景明度取霜化程度：背景越暗玻璃略厚，避免文字完全糊进背景。
      */
     fun frostFor(luminance: Float): Float {
         val t = luminance.coerceIn(0f, 1f)
         return frostOnDark + (frostOnLight - frostOnDark) * t
     }
 
-    /** 边缘描边：1px，方向性（上亮下弱） */
-    const val borderTopAlpha = 0.55f
-    const val borderBottomAlpha = 0.10f
+    private val InkDark = Color(0xFF15171C)
+    private val InkLight = Color(0xFFF2F5FA)
+
+    /**
+     * 内容色自适应：亮底用近黑、暗底用近白，让透明玻璃上的文字在任何网站都可读。
+     * 用 [contentLuminance]（去掉边缘轮廓光的明度）判断，避免被高光亮边误导。
+     */
+    fun contentColorFor(luminance: Float): Color =
+        if (luminance >= 0.5f) InkDark else InkLight
+
+    /** 边缘描边：1px，方向性（上亮下弱）。很低，只勾轮廓不发光。 */
+    const val borderTopAlpha = 0.28f
+    const val borderBottomAlpha = 0.06f
 
     // ---------- 流光（加载指示） ----------
     const val rimPeriodMs = 1600

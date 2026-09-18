@@ -17,15 +17,16 @@ import androidx.compose.ui.unit.IntOffset
 object Springs {
     val gentle: SpringSpec<Float> = spring(dampingRatio = 0.86f, stiffness = 260f)
     val snappy: SpringSpec<Float> = spring(dampingRatio = 0.72f, stiffness = 700f)
-    val bouncy: SpringSpec<Float> = spring(dampingRatio = 0.45f, stiffness = 520f)
+    val bouncy: SpringSpec<Float> = spring(dampingRatio = 0.5f, stiffness = 680f)
     val settle: SpringSpec<Float> = spring(dampingRatio = 1f, stiffness = 240f)
 
     val gentleDp: SpringSpec<Dp> = spring(dampingRatio = 0.86f, stiffness = 260f)
     val bouncyDp: SpringSpec<Dp> = spring(dampingRatio = 0.5f, stiffness = 520f)
+    val snappyDp: SpringSpec<Dp> = spring(dampingRatio = 0.72f, stiffness = 700f)
 
     val gentleOffset: SpringSpec<IntOffset> = spring(dampingRatio = 0.86f, stiffness = 260f)
     val snappyOffset: SpringSpec<IntOffset> = spring(dampingRatio = 0.72f, stiffness = 700f)
 
-    /** 地址栏/菜单键在主页与浏览态之间飞行 */
-    val flight: SpringSpec<Rect> = spring(dampingRatio = 0.82f, stiffness = 300f)
+    /** 地址栏/菜单键在主页与浏览态之间飞行：干脆、几乎不回弹 */
+    val flight: SpringSpec<Rect> = spring(dampingRatio = 0.92f, stiffness = 520f)
 }

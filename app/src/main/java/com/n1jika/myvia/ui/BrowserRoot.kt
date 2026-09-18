@@ -66,6 +66,8 @@ import com.n1jika.myvia.ui.motion.Springs
 import com.n1jika.myvia.ui.motion.impactEffect
 import com.n1jika.myvia.ui.motion.rememberImpact
 import com.n1jika.myvia.ui.motion.rememberHaptics
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -169,9 +171,41 @@ fun BrowserRoot(
                 // 地址栏与菜单键到位：来一次轻微碰撞，玻璃"碰"在一起
                 impact.impact()
                 haptic(Kind.Confirm)
-                ScreenCapture.captureBackdrop(activity.window) { bd ->
-                    if (bd != null) ui.pageBackdrop = bd
+            }
+        }
+
+        // ---------- 实时折射：浏览态按帧抓玻璃下方的屏幕块 ----------
+        // 只抓"顶部条带"（覆盖地址栏 + 菜单键 + 打开时的菜单），飞行时该块随
+        // bar 位置变化 → 抓到屏幕真实合成画面（主页→网页的交叉淡入也被如实折射）；
+        // 落地后跟随网页滚动刷新。用 busy 标志避免抓帧请求堆积。
+        LaunchedEffect(ui.mode, ui.backgroundVersion) {
+            if (ui.mode != UiMode.Browsing) return@LaunchedEffect
+            val window = activity.window
+            var busy = false
+            while (isActive) {
+                if (!busy) {
+                    busy = true
+                    val barNow = barRect.value
+                    val btnNow = btnRect.value
+                    val menuPx = if (ui.menuOpen) {
+                        with(density) {
+                            GlassTokens.menuItemHeight.toPx() * GlassTokens.menuVisibleItems +
+                                GlassTokens.menuCorner.toPx() * 2f
+                        }
+                    } else {
+                        0f
+                    }
+                    val bandBottom = (maxOf(barNow.bottom, btnNow.bottom) + menuPx)
+                        .coerceIn(1f, h)
+                    ScreenCapture.captureRegion(
+                        window = window,
+                        rect = android.graphics.Rect(0, 0, w.toInt(), bandBottom.toInt()),
+                    ) { bd ->
+                        busy = false
+                        if (bd != null) ui.pageBackdrop = bd
+                    }
                 }
+                delay(if (ui.loading) 16L else 80L)
             }
         }
 
@@ -245,6 +279,8 @@ fun BrowserRoot(
             ui.mode == UiMode.Editing -> backdropFocused
             else -> backdropNormal
         }
+        // 文字/图标颜色按玻璃下方内容的明度自适应：浅底黑、深底白
+        val contentColor = GlassTokens.contentColorFor(backdrop?.contentLuminance ?: 1f)
 
         // ---------- 流光：加载中绕边框顺时针跑 ----------
         // 页面上线后至少显示一小段，避免秒开时流光一闪而过、反而像闪烁
@@ -286,7 +322,7 @@ fun BrowserRoot(
             } else {
                 GlassTokens.searchBarCorner
             },
-            animationSpec = Springs.gentleDp,
+            animationSpec = Springs.snappyDp,
             label = "barCorner",
         )
 
@@ -329,6 +365,7 @@ fun BrowserRoot(
                 text = ui.query,
                 url = ui.currentUrl,
                 editing = ui.mode != UiMode.Browsing,
+                contentColor = contentColor,
                 onTextChange = { ui.query = it },
                 onSubmit = {
                     keyboard?.hide()
@@ -382,7 +419,7 @@ fun BrowserRoot(
                 .offset { IntOffset(btn.left.roundToInt(), btn.top.roundToInt()) }
                 .impactEffect(impact),
         ) {
-            HamburgerIcon()
+            HamburgerIcon(color = contentColor)
         }
 
         // ---------- 下拉菜单 ----------
@@ -425,10 +462,7 @@ fun BrowserRoot(
             ) {
                 BrowserMenu(
                     backdrop = backdrop,
-                    frost = maxOf(
-                        GlassTokens.frostFor(backdrop?.luminance ?: 1f),
-                        GlassTokens.menuMinFrost,
-                    ),
+                    frost = GlassTokens.menuFrost,
                     onPick = { action ->
                         ui.menuOpen = false
                         onMenuAction(action)

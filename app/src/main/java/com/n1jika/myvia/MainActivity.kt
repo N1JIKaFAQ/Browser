@@ -21,7 +21,6 @@ import com.n1jika.myvia.tab.TabItem
 import com.n1jika.myvia.tab.TabManager
 import com.n1jika.myvia.ui.BrowserRoot
 import com.n1jika.myvia.ui.BrowserUiState
-import com.n1jika.myvia.ui.ScreenCapture
 import com.n1jika.myvia.ui.UiMode
 import com.n1jika.myvia.ui.menu.MenuAction
 
@@ -36,20 +35,25 @@ class MainActivity : AppCompatActivity(), BrowserView.BrowserCallback {
     private val currentTab: TabItem?
         get() = pager?.let { tabManager.tabs.getOrNull(it.currentItem) }
 
-    /** 选一张自己的照片当主页背景（同时成为玻璃的折射来源）。 */
+    /** 选一张自己的照片 → 进裁切界面 → 完成后刷新背景。 */
     private val pickBackground = registerForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
     ) { uri ->
         if (uri != null) {
             runCatching {
-                contentResolver.takePersistableUriPermission(
-                    uri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
-                )
+                contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            Prefs.setBackgroundUri(this, uri)
-            ui.backgroundVersion++
+            cropLauncher.launch(
+                Intent(this, com.n1jika.myvia.ui.home.BackgroundCropActivity::class.java)
+                    .setData(uri),
+            )
         }
+    }
+
+    private val cropLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        if (result.resultCode == RESULT_OK) ui.backgroundVersion++
     }
 
     private val currentWebView: BrowserView?
@@ -129,12 +133,6 @@ class MainActivity : AppCompatActivity(), BrowserView.BrowserCallback {
         currentTab?.currentUrl = url
         ui.currentUrl = url
         view.loadUrl(url)
-    }
-
-    private fun capturePageBackdrop() {
-        ScreenCapture.captureBackdrop(window) { backdrop ->
-            if (backdrop != null) ui.pageBackdrop = backdrop
-        }
     }
 
     // ---------- 标签 ----------
@@ -222,10 +220,6 @@ class MainActivity : AppCompatActivity(), BrowserView.BrowserCallback {
             if (view === currentWebView) {
                 ui.loading = progress in 1..99
                 view.url?.let { if (it != ui.currentUrl) ui.currentUrl = it }
-                if (progress >= 100 && ui.mode == UiMode.Browsing) {
-                    ui.loading = false
-                    capturePageBackdrop()
-                }
             }
         }
     }
