@@ -209,7 +209,7 @@ fun BrowserRoot(
                         if (bd != null) ui.pageBackdrop = bd
                     }
                 }
-                delay(if (ui.loading) 16L else 80L)
+                delay(if (ui.loading) 33L else 60L)
             }
         }
 

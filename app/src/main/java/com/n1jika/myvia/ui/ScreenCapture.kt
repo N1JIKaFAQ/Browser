@@ -46,12 +46,11 @@ object ScreenCapture {
     }
 
     /**
-     * 只抓窗口里 `rect`（屏幕坐标）这一块，转成带原点的玻璃源。
+     * 只抓窗口里 `rect`（屏幕坐标）这一块，转成带原点的玻璃源，逐帧调用即实时跟随滚动。
      *
-     * 优先用 [sourceView]（当前 WebView）**软件绘制**出该区域的实时网页像素——
-     * PixelCopy 抓 WebView 合成层在部分机型（尤其 ColorOS）拿不到内容、会退化成
-     * 壁纸或黑块；而 `View.draw()` 能稳定拿到网页当前画面（含滚动位置）。
-     * sourceView 不可用时再退回 PixelCopy。回调在主线程触发。
+     * 优先 [PixelCopy]：它读的是**合成后的屏幕像素**，能反映 WebView 当前滚动位置；
+     * 抓不到（个别机型/DRM）才退回 `View.draw()` 软绘。回调在主线程；失败回 null，
+     * 调用方保留上一帧。
      */
     fun captureRegion(
         window: Window?,
@@ -62,45 +61,48 @@ object ScreenCapture {
         val decor: View = window?.decorView ?: return onResult(null)
         val clamp = Rect(rect).apply { intersect(0, 0, decor.width, decor.height) }
         if (clamp.width() <= 0 || clamp.height() <= 0) return onResult(null)
-
         val origin = Offset(clamp.left.toFloat(), clamp.top.toFloat())
 
-        if (sourceView != null && sourceView.width > 0 && sourceView.height > 0) {
-            val shot = Bitmap.createBitmap(clamp.width(), clamp.height(), Bitmap.Config.ARGB_8888)
-            val canvas = Canvas(shot)
-            canvas.translate(-clamp.left.toFloat(), -clamp.top.toFloat())
-            runCatching { sourceView.draw(canvas) }
-                .onFailure {
-                    shot.recycle()
-                    captureViaPixelCopy(window, clamp, origin, onResult)
-                    return
-                }
-            onResult(BackdropSource.fromRegion(shot, origin))
-            return
+        val region = Bitmap.createBitmap(clamp.width(), clamp.height(), Bitmap.Config.ARGB_8888)
+        val fallback = {
+            if (!region.isRecycled) region.recycle()
+            drawFallback(sourceView, clamp, origin, onResult)
         }
-        captureViaPixelCopy(window, clamp, origin, onResult)
+        runCatching {
+            PixelCopy.request(
+                window!!,
+                clamp,
+                region,
+                PixelCopy.OnPixelCopyFinishedListener { r: Int ->
+                    if (r == PixelCopy.SUCCESS) {
+                        val bd = BackdropSource.fromRegion(region, origin)
+                        if (!region.isRecycled) region.recycle()
+                        onResult(bd)
+                    } else {
+                        fallback()
+                    }
+                },
+                main,
+            )
+        }.onFailure { fallback() }
     }
 
-    private fun captureViaPixelCopy(
-        window: Window,
+    private fun drawFallback(
+        sourceView: View?,
         clamp: Rect,
         origin: Offset,
         onResult: (BackdropSource?) -> Unit,
     ) {
-        val region = Bitmap.createBitmap(clamp.width(), clamp.height(), Bitmap.Config.ARGB_8888)
-        runCatching {
-            PixelCopy.request(
-                window,
-                clamp,
-                region,
-                PixelCopy.OnPixelCopyFinishedListener { r: Int ->
-                    onResult(
-                        if (r == PixelCopy.SUCCESS) BackdropSource.fromRegion(region, origin) else null,
-                    )
-                },
-                main,
-            )
-        }.onFailure { onResult(null) }
+        if (sourceView == null || sourceView.width <= 0 || sourceView.height <= 0) {
+            onResult(null)
+            return
+        }
+        val shot = Bitmap.createBitmap(clamp.width(), clamp.height(), Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(shot)
+        canvas.translate(-clamp.left.toFloat(), -clamp.top.toFloat())
+        runCatching { sourceView.draw(canvas) }
+            .onSuccess { onResult(BackdropSource.fromRegion(shot, origin)) }
+            .onFailure { shot.recycle(); onResult(null) }
     }
 
     /** 整窗抓取并直接转成玻璃源（备用路径）。 */

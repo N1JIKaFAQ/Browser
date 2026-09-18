@@ -27,6 +27,6 @@ object Springs {
     val gentleOffset: SpringSpec<IntOffset> = spring(dampingRatio = 0.86f, stiffness = 260f)
     val snappyOffset: SpringSpec<IntOffset> = spring(dampingRatio = 0.72f, stiffness = 700f)
 
-    /** 地址栏/菜单键在主页与浏览态之间飞行：干脆、几乎不回弹 */
-    val flight: SpringSpec<Rect> = spring(dampingRatio = 0.92f, stiffness = 520f)
+    /** 地址栏/菜单键在主页与浏览态之间飞行：带一点回弹，更灵动 */
+    val flight: SpringSpec<Rect> = spring(dampingRatio = 0.7f, stiffness = 440f)
 }
